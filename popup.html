@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimebackTutor</title>
+    <link rel="stylesheet" href="popup.css">
+    <!-- MathJax for mathematical notation -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+            }
+        };
+    </script>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>TimebackTutor</h1>
+        <p class="subtitle">Is abby gone? Well im mean this isnt as good but good enough</p>
+    </div>
+    
+    <!-- Status Section -->
+    <div id="status-section" class="status-section">
+        <div id="status-message" class="status-message">
+            <span id="status-text">CLICK THE BUTTON</span>
+            <div id="status-loader" class="status-loader" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <!-- Chat Messages Area -->
+    <div id="chat-messages" class="chat-messages">
+        <!-- Messages will be dynamically added here -->
+    </div>
+    
+    <!-- Input Section -->
+    <div id="input-section" class="input-section">
+        <div class="input-container">
+            <input 
+                type="text" 
+                id="question-input" 
+                placeholder="What's your question?"
+                disabled
+            >
+            <button id="submit-btn" disabled>
+                <span class="button-text">Send</span>
+                <div class="button-loader" style="display: none;"></div>
+            </button>
+        </div>
+        <div class="input-help">
+            <span id="input-help-text">Extract page content first by clicking the floating button</span>
+        </div>
+    </div>
+    
+    <!-- Footer Actions -->
+    <div class="footer-actions">
+        <button id="clear-btn" class="secondary-btn" disabled>
+            Clear Chat
+        </button>
+        <button id="refresh-btn" class="secondary-btn">
+            Refresh Content
+        </button>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
