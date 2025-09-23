@@ -2,8 +2,18 @@
 // Handles AI processing and message coordination
 
 // Google AI API configuration
-const GOOGLE_API_KEY = "AIzaSyBIuj91d0heWe9FMuZfyqvZlOdcPVKWUqw";
+// Note: API key should be set by user in extension options
+let GOOGLE_API_KEY = null;
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+// Get API key from storage
+async function getApiKey() {
+    if (GOOGLE_API_KEY) return GOOGLE_API_KEY;
+    
+    const result = await chrome.storage.local.get(['googleApiKey']);
+    GOOGLE_API_KEY = result.googleApiKey;
+    return GOOGLE_API_KEY;
+}
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -171,6 +181,11 @@ async function handleSubmitQuestion(request, sendResponse) {
 // Generate AI response using Google Generative AI
 async function generateAIResponse(question, extractedText, conversationMemory) {
     try {
+        // Get API key
+        const apiKey = await getApiKey();
+        if (!apiKey) {
+            throw new Error('You need an API key to use this extension. It\'s very easy to get one! Go to https://makersuite.google.com/app/apikey, sign in with your Google account, press "Create API Key", then copy and paste it into the extension. (Don\'t worry, it\'s free!)');
+        }
         // Build conversation history for context
         let conversationHistory = '';
         if (conversationMemory.length > 0) {
@@ -212,7 +227,7 @@ Guidelines:
 Please provide a helpful and accurate response based on the content above.`;
 
         // Make API request to Google Generative AI
-        const response = await fetch(`${API_URL}?key=${GOOGLE_API_KEY}`, {
+        const response = await fetch(`${API_URL}?key=${apiKey}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -227,7 +242,7 @@ Please provide a helpful and accurate response based on the content above.`;
                     temperature: 0.7,
                     topK: 40,
                     topP: 0.95,
-                    maxOutputTokens: 2048,
+                    maxOutputTokens: 5000,
                 }
             })
         });

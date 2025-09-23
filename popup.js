@@ -155,7 +155,12 @@
                 }, 3000);
                 
             } else {
-                showStatus(response.error || 'Failed to get AI response', 'error');
+                // Check if it's an API key error
+                if (response.error && response.error.includes('API key')) {
+                    showApiKeySetup();
+                } else {
+                    showStatus(response.error || 'Failed to get AI response', 'error');
+                }
             }
             
         } catch (error) {
@@ -426,6 +431,124 @@
             buttonLoader.style.display = 'none';
             submitBtn.disabled = !hasExtractedText;
             questionInput.disabled = !hasExtractedText;
+        }
+    }
+    
+    // Show API key setup modal
+    function showApiKeySetup() {
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.id = 'api-key-modal';
+        modal.className = 'api-key-modal';
+        
+        modal.innerHTML = `
+            <div class="api-key-modal-content">
+                <div class="api-key-header">
+                    <h2>🔑 API Key Setup</h2>
+                </div>
+                <div class="api-key-message">
+                    <p>You need an api key this is very easy <a href="https://makersuite.google.com/app/apikey" target="_blank" id="api-key-link">click this link</a> login and press create new api key. then copy and paste it into this box. (Dont worry this is free)</p>
+                </div>
+                <div class="api-key-input-section">
+                    <input type="password" id="api-key-input" placeholder="Paste your API key here">
+                    <div class="api-key-buttons">
+                        <button id="save-api-key" class="btn-primary">Save API Key</button>
+                        <button id="cancel-api-key" class="btn-secondary">Cancel</button>
+                    </div>
+                </div>
+                <div id="api-key-status" class="api-key-status"></div>
+            </div>
+        `;
+        
+        // Add modal to page
+        document.body.appendChild(modal);
+        
+        // Get modal elements
+        const apiKeyInput = document.getElementById('api-key-input');
+        const saveBtn = document.getElementById('save-api-key');
+        const cancelBtn = document.getElementById('cancel-api-key');
+        const apiKeyStatus = document.getElementById('api-key-status');
+        const apiKeyLink = document.getElementById('api-key-link');
+        
+        // Focus on input
+        setTimeout(() => apiKeyInput.focus(), 100);
+        
+        // Handle link click
+        apiKeyLink.addEventListener('click', () => {
+            // Link will open in new tab automatically
+            apiKeyStatus.innerHTML = '<div class="status-info">✅ Link opened! Get your API key and come back here to paste it.</div>';
+        });
+        
+        // Handle save button
+        saveBtn.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            
+            if (!apiKey) {
+                apiKeyStatus.innerHTML = '<div class="status-error">Please enter an API key</div>';
+                return;
+            }
+            
+            // Basic validation
+            if (apiKey.length < 20) {
+                apiKeyStatus.innerHTML = '<div class="status-error">API key appears to be too short. Please check and try again.</div>';
+                return;
+            }
+            
+            if (!apiKey.startsWith('AIza')) {
+                apiKeyStatus.innerHTML = '<div class="status-error">Invalid Google AI API key format. Keys should start with "AIza".</div>';
+                return;
+            }
+            
+            try {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+                apiKeyStatus.innerHTML = '<div class="status-loading">Saving and testing API key...</div>';
+                
+                // Save to storage
+                await chrome.storage.local.set({
+                    googleApiKey: apiKey
+                });
+                
+                apiKeyStatus.innerHTML = '<div class="status-success">✅ API key saved successfully! You can now ask questions.</div>';
+                
+                // Close modal after success
+                setTimeout(() => {
+                    closeApiKeyModal();
+                    showStatus('API key configured successfully!', 'success');
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Error saving API key:', error);
+                apiKeyStatus.innerHTML = '<div class="status-error">Error saving API key. Please try again.</div>';
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save API Key';
+            }
+        });
+        
+        // Handle cancel button
+        cancelBtn.addEventListener('click', closeApiKeyModal);
+        
+        // Handle Enter key in input
+        apiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                saveBtn.click();
+            }
+        });
+        
+        // Handle Escape key
+        document.addEventListener('keydown', function escapeHandler(e) {
+            if (e.key === 'Escape') {
+                closeApiKeyModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        });
+    }
+    
+    // Close API key setup modal
+    function closeApiKeyModal() {
+        const modal = document.getElementById('api-key-modal');
+        if (modal) {
+            modal.remove();
         }
     }
     

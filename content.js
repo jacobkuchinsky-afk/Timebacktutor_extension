@@ -98,6 +98,14 @@
         const buttonText = button.querySelector('.button-text');
         const spinner = button.querySelector('.loading-spinner');
         
+        // Check if API key is configured first
+        const hasApiKey = await checkApiKeyConfiguration();
+        if (!hasApiKey) {
+            console.log('AlphaTutor: No API key found, showing setup modal');
+            showWebpageApiKeySetup();
+            return;
+        }
+        
         // Show loading state
         button.disabled = true;
         buttonText.style.display = 'none';
@@ -615,9 +623,9 @@
                 }
             };
             
-            // Load MathJax directly
+            // Load MathJax directly (local)
             const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js';
+            script.src = chrome.runtime.getURL('lib/mathjax/tex-chtml.js');
             script.async = true;
             script.onload = () => {
                 console.log('AlphaTutor: MathJax script loaded');
@@ -638,6 +646,222 @@
         });
     }
     
+    // Check if API key is configured
+    async function checkApiKeyConfiguration() {
+        try {
+            const result = await chrome.storage.local.get(['googleApiKey']);
+            return !!result.googleApiKey;
+        } catch (error) {
+            console.error('Error checking API key:', error);
+            return false;
+        }
+    }
+    
+    // Show API key setup modal on the webpage
+    function showWebpageApiKeySetup() {
+        // Remove existing modal if any
+        const existingModal = document.getElementById('alphatutor-api-key-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.id = 'alphatutor-api-key-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            animation: modalFadeIn 0.3s ease;
+        `;
+        
+        modal.innerHTML = `
+            <div style="
+                background: #2a2a2a;
+                border: 1px solid #404040;
+                border-radius: 12px;
+                padding: 24px;
+                width: 90%;
+                max-width: 400px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+                animation: modalSlideIn 0.3s ease;
+                color: #e0e0e0;
+            ">
+                <div style="text-align: center; margin-bottom: 16px;">
+                    <h2 style="color: #e0e0e0; font-size: 1.3rem; font-weight: 600; margin: 0;">🔑 API Key Setup</h2>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <p style="color: #b0b0b0; font-size: 0.9rem; line-height: 1.5; margin: 0;">
+                        You need an api key this is very easy <a href="https://makersuite.google.com/app/apikey" target="_blank" id="alphatutor-api-key-link" style="color: #4a9eff; text-decoration: none; font-weight: 600;">click this link</a> login and press create new api key. then copy and paste it into this box. (Dont worry this is free)
+                    </p>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <input type="password" id="alphatutor-api-key-input" placeholder="Paste your API key here" style="
+                        width: 100%;
+                        background: #333333;
+                        border: 1px solid #404040;
+                        border-radius: 8px;
+                        padding: 12px;
+                        color: #e0e0e0;
+                        font-size: 0.9rem;
+                        font-family: 'Fira Code', 'Consolas', monospace;
+                        margin-bottom: 16px;
+                        box-sizing: border-box;
+                    ">
+                    <div style="display: flex; gap: 8px;">
+                        <button id="alphatutor-save-api-key" style="
+                            background: linear-gradient(135deg, #4a9eff, #6bb6ff);
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            padding: 10px 16px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            flex: 1;
+                            font-size: 0.9rem;
+                        ">Save API Key</button>
+                        <button id="alphatutor-cancel-api-key" style="
+                            background: #333333;
+                            color: #b0b0b0;
+                            border: 1px solid #404040;
+                            border-radius: 8px;
+                            padding: 10px 16px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            flex: 1;
+                            font-size: 0.9rem;
+                        ">Cancel</button>
+                    </div>
+                </div>
+                <div id="alphatutor-api-key-status" style="margin-top: 12px; min-height: 20px;"></div>
+            </div>
+        `;
+        
+        // Add styles for animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes modalFadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes modalSlideIn {
+                from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Add modal to page
+        document.body.appendChild(modal);
+        
+        // Get modal elements
+        const apiKeyInput = document.getElementById('alphatutor-api-key-input');
+        const saveBtn = document.getElementById('alphatutor-save-api-key');
+        const cancelBtn = document.getElementById('alphatutor-cancel-api-key');
+        const apiKeyStatus = document.getElementById('alphatutor-api-key-status');
+        const apiKeyLink = document.getElementById('alphatutor-api-key-link');
+        
+        // Focus on input
+        setTimeout(() => apiKeyInput.focus(), 100);
+        
+        // Handle link click
+        apiKeyLink.addEventListener('click', () => {
+            apiKeyStatus.innerHTML = '<div style="background: rgba(23, 162, 184, 0.1); color: #17a2b8; border: 1px solid #17a2b8; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500;">✅ Link opened! Get your API key and come back here to paste it.</div>';
+        });
+        
+        // Handle save button
+        saveBtn.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            
+            if (!apiKey) {
+                apiKeyStatus.innerHTML = '<div style="background: rgba(220, 53, 69, 0.1); color: #dc3545; border: 1px solid #dc3545; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500;">Please enter an API key</div>';
+                return;
+            }
+            
+            // Basic validation
+            if (apiKey.length < 20) {
+                apiKeyStatus.innerHTML = '<div style="background: rgba(220, 53, 69, 0.1); color: #dc3545; border: 1px solid #dc3545; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500;">API key appears to be too short. Please check and try again.</div>';
+                return;
+            }
+            
+            if (!apiKey.startsWith('AIza')) {
+                apiKeyStatus.innerHTML = '<div style="background: rgba(220, 53, 69, 0.1); color: #dc3545; border: 1px solid #dc3545; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500;">Invalid Google AI API key format. Keys should start with "AIza".</div>';
+                return;
+            }
+            
+            try {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+                apiKeyStatus.innerHTML = '<div style="background: rgba(74, 158, 255, 0.1); color: #4a9eff; border: 1px solid #4a9eff; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 8px;"><div style="width: 16px; height: 16px; border: 2px solid transparent; border-top: 2px solid currentColor; border-radius: 50%; animation: spin 1s linear infinite;"></div>Saving and testing API key...</div>';
+                
+                // Save to storage
+                await chrome.storage.local.set({
+                    googleApiKey: apiKey
+                });
+                
+                apiKeyStatus.innerHTML = '<div style="background: rgba(40, 167, 69, 0.1); color: #28a745; border: 1px solid #28a745; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500;">✅ API key saved successfully! You can now use the extension.</div>';
+                
+                // Close modal after success
+                setTimeout(() => {
+                    modal.remove();
+                    showNotification('API key configured successfully! Click the "I NEED HELPPP" button to get started.', 'success');
+                    
+                    // Now load MathJax since API key is configured and UI already exists
+                    setTimeout(async () => {
+                        try {
+                            // Load MathJax first
+                            console.log('AlphaTutor: Loading MathJax after API key setup...');
+                            try {
+                                await loadMathJax();
+                                console.log('AlphaTutor: MathJax loaded successfully');
+                            } catch (mathJaxError) {
+                                console.warn('AlphaTutor: MathJax failed to load, continuing without it:', mathJaxError);
+                            }
+                            
+                            console.log('AlphaTutor: MathJax loaded after API key setup');
+                        } catch (error) {
+                            console.error('AlphaTutor: Error loading MathJax after API key setup:', error);
+                        }
+                    }, 1000);
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Error saving API key:', error);
+                apiKeyStatus.innerHTML = '<div style="background: rgba(220, 53, 69, 0.1); color: #dc3545; border: 1px solid #dc3545; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500;">Error saving API key. Please try again.</div>';
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save API Key';
+            }
+        });
+        
+        // Handle cancel button
+        cancelBtn.addEventListener('click', () => {
+            modal.remove();
+        });
+        
+        // Handle Enter key in input
+        apiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                saveBtn.click();
+            }
+        });
+        
+        // Handle Escape key
+        document.addEventListener('keydown', function escapeHandler(e) {
+            if (e.key === 'Escape') {
+                modal.remove();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        });
+    }
+    
     // Initialize when DOM is ready
     async function initialize() {
         try {
@@ -646,7 +870,21 @@
             // Wait a bit for page to fully load
             await new Promise(resolve => setTimeout(resolve, 1000));
             
-            // Load MathJax first
+            // Always create the floating button and chat interface first
+            createFloatingButton();
+            createChatInterface();
+            console.log('AlphaTutor: UI components created');
+            
+            // Check if API key is configured
+            const hasApiKey = await checkApiKeyConfiguration();
+            if (!hasApiKey) {
+                console.log('AlphaTutor: No API key found, showing setup modal');
+                showWebpageApiKeySetup();
+                // UI components are already created, so user can see the button
+                return;
+            }
+            
+            // Load MathJax if API key is available
             console.log('AlphaTutor: Loading MathJax...');
             try {
                 await loadMathJax();
@@ -655,11 +893,7 @@
                 console.warn('AlphaTutor: MathJax failed to load, continuing without it:', mathJaxError);
             }
             
-            // Create UI components
-            createFloatingButton();
-            createChatInterface();
-            
-            console.log('AlphaTutor: Initialization complete - floating button and chat interface injected');
+            console.log('AlphaTutor: Initialization complete - floating button and chat interface ready');
             
             // Add global error handler for MathJax
             window.addEventListener('error', (event) => {
