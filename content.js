@@ -314,13 +314,13 @@
         scrollToBottom();
     }
     
-    // Simplified MathJax rendering function
+    // Enhanced MathJax rendering function with robust error handling
     async function renderMathInElement(element) {
         try {
             console.log('AlphaTutor: renderMathInElement called');
             
-            // Check if element contains math expressions
-            const hasMath = element.innerHTML.includes('$');
+            // Check if element contains math expressions with better detection
+            const hasMath = detectMathExpressions(element);
             
             if (!hasMath) {
                 console.log('AlphaTutor: No math expressions found');
@@ -329,44 +329,214 @@
             
             console.log('AlphaTutor: Found math expressions, attempting to render...');
             
-            // Ensure MathJax is loaded
-            if (!window.MathJax || !window.MathJax.typesetPromise) {
-                console.log('AlphaTutor: Loading MathJax...');
-                await loadMathJax();
-                // Wait a bit more for MathJax to be fully ready
-                await new Promise(resolve => setTimeout(resolve, 1000));
+            // Add loading indicator
+            addMathLoadingIndicator(element);
+            
+            // Ensure MathJax is loaded with retry logic
+            const maxRetries = 3;
+            let retryCount = 0;
+            
+            while (retryCount < maxRetries) {
+                try {
+                    if (!window.MathJax || !window.MathJax.typesetPromise) {
+                        console.log(`AlphaTutor: Loading MathJax (attempt ${retryCount + 1}/${maxRetries})...`);
+                        await loadMathJax();
+                        
+                        // Wait for MathJax to be fully ready with proper checking
+                        await waitForMathJaxReady();
+                    }
+                    
+                    // Verify MathJax is actually ready
+                    if (!window.MathJax || !window.MathJax.typesetPromise) {
+                        throw new Error('MathJax not properly initialized');
+                    }
+                    
+                    console.log('AlphaTutor: Calling MathJax.typesetPromise...');
+                    
+                    // Clear any existing MathJax content first
+                    clearExistingMathJax(element);
+                    
+                    // Render with timeout
+                    await Promise.race([
+                        window.MathJax.typesetPromise([element]),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('MathJax rendering timeout')), 10000)
+                        )
+                    ]);
+                    
+                    console.log('AlphaTutor: MathJax rendering successful!');
+                    removeMathLoadingIndicator(element);
+                    return; // Success, exit retry loop
+                    
+                } catch (renderError) {
+                    console.error(`AlphaTutor: MathJax rendering failed (attempt ${retryCount + 1}):`, renderError);
+                    retryCount++;
+                    
+                    if (retryCount < maxRetries) {
+                        // Wait before retry
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                        // Reset MathJax for retry
+                        window.MathJax = null;
+                    }
+                }
             }
             
-            // Simple rendering approach
-            try {
-                console.log('AlphaTutor: Calling MathJax.typesetPromise...');
-                await window.MathJax.typesetPromise([element]);
-                console.log('AlphaTutor: MathJax rendering successful!');
-            } catch (renderError) {
-                console.error('AlphaTutor: MathJax rendering failed:', renderError);
-                addMathFallbackStyling(element);
-            }
+            // All retries failed, use fallback
+            console.error('AlphaTutor: All MathJax rendering attempts failed, using fallback');
+            removeMathLoadingIndicator(element);
+            addMathFallbackStyling(element);
             
         } catch (error) {
             console.error('AlphaTutor: Error in renderMathInElement:', error);
+            removeMathLoadingIndicator(element);
             addMathFallbackStyling(element);
         }
     }
     
-    // Add fallback styling for failed math expressions
+    // Enhanced math detection function
+    function detectMathExpressions(element) {
+        const text = element.innerHTML;
+        
+        // Check for various math patterns
+        const mathPatterns = [
+            /\$[^$\n]+\$/g,           // Inline math $...$
+            /\$\$[^$]*\$\$/g,         // Display math $$...$$
+            /\\[\(\[].*?\\[\)\]]/g,   // LaTeX brackets \(...\) or \[...\]
+            /\\[a-zA-Z]+/g,           // LaTeX commands like \frac, \sqrt, etc.
+        ];
+        
+        return mathPatterns.some(pattern => pattern.test(text));
+    }
+    
+    // Add loading indicator for math rendering
+    function addMathLoadingIndicator(element) {
+        // Remove existing indicator
+        removeMathLoadingIndicator(element);
+        
+        const indicator = document.createElement('div');
+        indicator.className = 'alphatutor-math-loading';
+        indicator.textContent = 'Rendering math...';
+        element.style.position = 'relative';
+        element.appendChild(indicator);
+    }
+    
+    // Remove loading indicator
+    function removeMathLoadingIndicator(element) {
+        const existing = element.querySelector('.alphatutor-math-loading');
+        if (existing) {
+            existing.remove();
+        }
+    }
+    
+    // Clear existing MathJax content to prevent conflicts
+    function clearExistingMathJax(element) {
+        // Remove existing MathJax elements
+        const mathJaxElements = element.querySelectorAll('mjx-container, .MathJax, .MathJax_Display');
+        mathJaxElements.forEach(el => el.remove());
+    }
+    
+    // Wait for MathJax to be fully ready
+    async function waitForMathJaxReady() {
+        const maxWait = 15000; // 15 seconds max
+        const checkInterval = 100; // Check every 100ms
+        let waited = 0;
+        
+        while (waited < maxWait) {
+            if (window.MathJax && 
+                window.MathJax.typesetPromise && 
+                window.MathJax.startup && 
+                window.MathJax.startup.document) {
+                console.log('AlphaTutor: MathJax is ready');
+                return;
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, checkInterval));
+            waited += checkInterval;
+        }
+        
+        throw new Error('MathJax ready timeout');
+    }
+    
+    // Enhanced fallback styling for failed math expressions
     function addMathFallbackStyling(element) {
-        const mathElements = element.querySelectorAll('*');
-        mathElements.forEach(el => {
-            const text = el.textContent || '';
-            if (text.includes('\\frac') || text.includes('\\sqrt') || text.includes('\\sum') || 
-                text.includes('\\int') || text.includes('\\lim') || text.match(/\$.*\$/)) {
-                el.style.cssText += `
-                    background: rgba(255, 215, 0, 0.1);
-                    padding: 2px 4px;
-                    border-radius: 3px;
-                    font-family: 'Courier New', monospace;
-                    border-left: 2px solid #ffd700;
+        console.log('AlphaTutor: Applying fallback styling for math expressions');
+        
+        // Add error indicator
+        const errorIndicator = document.createElement('div');
+        errorIndicator.className = 'alphatutor-math-error';
+        errorIndicator.textContent = 'Math render failed';
+        errorIndicator.title = 'MathJax failed to render. Showing raw LaTeX.';
+        element.style.position = 'relative';
+        element.appendChild(errorIndicator);
+        
+        // Find and style math expressions more comprehensively
+        const mathPatterns = [
+            { pattern: /\$\$([^$]+)\$\$/g, type: 'display' },
+            { pattern: /\$([^$\n]+)\$/g, type: 'inline' },
+            { pattern: /\\[\(\[]([^\\]*(?:\\(?![\)\]])[^\\]*)*)\\[\)\]]/g, type: 'bracket' },
+            { pattern: /\\(frac|sqrt|sum|int|lim|prod|sin|cos|tan|log|ln|exp|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|infty|partial|nabla|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|subset|supset|in|notin|cup|cap|wedge|vee)(?:\{[^}]*\})*(?:\[[^\]]*\])*/g, type: 'command' }
+        ];
+        
+        let htmlContent = element.innerHTML;
+        let hasReplacements = false;
+        
+        mathPatterns.forEach(({ pattern, type }) => {
+            htmlContent = htmlContent.replace(pattern, (match) => {
+                hasReplacements = true;
+                const displayStyle = type === 'display' ? 'display: block; text-align: center; margin: 12px 0;' : 'display: inline;';
+                return `<span class="alphatutor-math-fallback" style="
+                    background: rgba(255, 215, 0, 0.1) !important;
+                    padding: ${type === 'display' ? '8px 12px' : '2px 6px'} !important;
+                    border-radius: 4px !important;
+                    font-family: 'Fira Code', 'Consolas', 'Courier New', monospace !important;
+                    border-left: 3px solid #ffd700 !important;
+                    color: #e0e0e0 !important;
+                    font-size: ${type === 'display' ? '1.1em' : '0.95em'} !important;
+                    ${displayStyle}
+                    border: 1px solid rgba(255, 215, 0, 0.3) !important;
+                    position: relative !important;
+                " title="LaTeX: ${match.replace(/"/g, '&quot;')}">${match}</span>`;
+            });
+        });
+        
+        if (hasReplacements) {
+            element.innerHTML = htmlContent;
+            console.log('AlphaTutor: Applied fallback styling to math expressions');
+        }
+        
+        // Also check for any remaining unprocessed math in text nodes
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        const textNodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+            if (node.textContent.includes('\\') || node.textContent.includes('$')) {
+                textNodes.push(node);
+            }
+        }
+        
+        textNodes.forEach(textNode => {
+            const text = textNode.textContent;
+            if (text.match(/[\$\\]/)) {
+                const span = document.createElement('span');
+                span.className = 'alphatutor-math-fallback';
+                span.style.cssText = `
+                    background: rgba(255, 215, 0, 0.1) !important;
+                    padding: 2px 6px !important;
+                    border-radius: 3px !important;
+                    font-family: 'Fira Code', 'Consolas', monospace !important;
+                    border-left: 2px solid #ffd700 !important;
+                    color: #e0e0e0 !important;
+                    font-size: 0.9em !important;
                 `;
+                span.textContent = text;
+                span.title = `LaTeX: ${text}`;
+                textNode.parentNode.replaceChild(span, textNode);
             }
         });
     }
@@ -594,7 +764,7 @@
         }
     });
     
-    // Simplified MathJax loading
+    // Enhanced MathJax loading with better configuration and fallback
     function loadMathJax() {
         return new Promise((resolve, reject) => {
             // Check if MathJax is already loaded
@@ -604,45 +774,133 @@
                 return;
             }
             
-            // Simple MathJax configuration
+            // Enhanced MathJax configuration
             window.MathJax = {
                 tex: {
-                    inlineMath: [['$', '$']],
-                    displayMath: [['$$', '$$']],
-                    processEscapes: true
+                    inlineMath: [['$', '$'], ['\\(', '\\)']],
+                    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                    processEscapes: true,
+                    processEnvironments: true,
+                    processRefs: true,
+                    digits: /^(?:[0-9]+(?:\{,\}[0-9]{3})*(?:\.[0-9]*)?|\.[0-9]+)/,
+                    tags: 'none',
+                    tagSide: 'right',
+                    tagIndent: '0.8em',
+                    useLabelIds: true,
+                    multlineWidth: '85%',
+                    maxMacros: 1000,
+                    maxBuffer: 5 * 1024,
+                    packages: {
+                        '[+]': ['base', 'ams', 'newcommand', 'configmacros', 'action', 'require', 'autoload', 'color']
+                    }
+                },
+                chtml: {
+                    scale: 1,
+                    minScale: 0.5,
+                    matchFontHeight: false,
+                    displayAlign: 'center',
+                    displayIndent: '0',
+                    fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2'
                 },
                 options: {
-                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'annotation', 'annotation-xml'],
+                    includeHtmlTags: ['#comment'],
+                    processHtmlClass: 'tex2jax_process',
+                    ignoreHtmlClass: 'tex2jax_ignore',
+                    renderActions: {
+                        addMenu: [0, '', '']
+                    },
+                    menuOptions: {
+                        settings: {
+                            assistiveMml: true,
+                            collapsible: false,
+                            explorer: false,
+                            inTabOrder: true
+                        }
+                    }
+                },
+                loader: {
+                    load: ['[tex]/ams', '[tex]/newcommand', '[tex]/configmacros', '[tex]/action', '[tex]/require', '[tex]/autoload', '[tex]/color']
                 },
                 startup: {
                     ready: () => {
-                        console.log('AlphaTutor: MathJax ready');
-                        window.MathJax.startup.defaultReady();
-                        resolve();
+                        console.log('AlphaTutor: MathJax startup ready');
+                        try {
+                            window.MathJax.startup.defaultReady();
+                            console.log('AlphaTutor: MathJax fully initialized');
+                            resolve();
+                        } catch (error) {
+                            console.error('AlphaTutor: MathJax startup error:', error);
+                            reject(error);
+                        }
+                    },
+                    pageReady: () => {
+                        console.log('AlphaTutor: MathJax page ready');
+                        return window.MathJax.startup.defaultPageReady();
                     }
                 }
             };
             
-            // Load MathJax directly (local)
-            const script = document.createElement('script');
-            script.src = chrome.runtime.getURL('lib/mathjax/tex-chtml.js');
-            script.async = true;
-            script.onload = () => {
-                console.log('AlphaTutor: MathJax script loaded');
-            };
-            script.onerror = () => {
-                console.error('AlphaTutor: Failed to load MathJax');
-                reject(new Error('Failed to load MathJax'));
+            // Try loading local MathJax first, then fallback to CDN
+            const tryLoadMathJax = async (scriptSrc, isLocal = true) => {
+                return new Promise((scriptResolve, scriptReject) => {
+                    const script = document.createElement('script');
+                    script.src = scriptSrc;
+                    script.async = true;
+                    script.id = 'mathjax-script';
+                    
+                    script.onload = () => {
+                        console.log(`AlphaTutor: MathJax script loaded from ${isLocal ? 'local' : 'CDN'}`);
+                        scriptResolve();
+                    };
+                    
+                    script.onerror = (error) => {
+                        console.error(`AlphaTutor: Failed to load MathJax from ${isLocal ? 'local' : 'CDN'}:`, error);
+                        script.remove();
+                        scriptReject(error);
+                    };
+                    
+                    document.head.appendChild(script);
+                    
+                    // Timeout for script loading
+                    setTimeout(() => {
+                        if (!script.onload.called) {
+                            console.error(`AlphaTutor: MathJax loading timeout from ${isLocal ? 'local' : 'CDN'}`);
+                            script.remove();
+                            scriptReject(new Error('Script loading timeout'));
+                        }
+                    }, 10000);
+                });
             };
             
-            document.head.appendChild(script);
+            // Main loading logic with fallback
+            const loadWithFallback = async () => {
+                try {
+                    // Try local first
+                    console.log('AlphaTutor: Attempting to load MathJax from local files...');
+                    await tryLoadMathJax(chrome.runtime.getURL('lib/mathjax/tex-chtml.js'), true);
+                } catch (localError) {
+                    console.warn('AlphaTutor: Local MathJax failed, trying CDN fallback...', localError);
+                    try {
+                        // Fallback to CDN
+                        await tryLoadMathJax('https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js', false);
+                    } catch (cdnError) {
+                        console.error('AlphaTutor: Both local and CDN MathJax failed:', cdnError);
+                        throw new Error('All MathJax loading attempts failed');
+                    }
+                }
+            };
             
-            // Timeout
+            // Start loading
+            loadWithFallback().catch(reject);
+            
+            // Overall timeout
             setTimeout(() => {
                 if (!window.MathJax || !window.MathJax.typesetPromise) {
-                    reject(new Error('MathJax loading timeout'));
+                    console.error('AlphaTutor: MathJax initialization timeout');
+                    reject(new Error('MathJax initialization timeout'));
                 }
-            }, 15000);
+            }, 20000);
         });
     }
     
